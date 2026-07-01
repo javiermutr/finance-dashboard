@@ -678,7 +678,13 @@ def generate_html(months_data: list[dict], latest_idx: int) -> str:
           margin, net_worth, profits, budgets (list of {cat,s,l,p,tx}) }
     latest_idx: index into months_data that should be shown by default (usually last)
     """
-    now_str = datetime.now().strftime("%d %b %Y %H:%M")
+    try:
+        import zoneinfo
+        berlin = zoneinfo.ZoneInfo("Europe/Berlin")
+        now_str = datetime.now(tz=berlin).strftime("%d %b %Y %H:%M")
+    except Exception:
+        # Fallback for Python < 3.9
+        now_str = datetime.utcnow().strftime("%d %b %Y %H:%M UTC")
 
     months_json = json.dumps(months_data, ensure_ascii=False)
 
