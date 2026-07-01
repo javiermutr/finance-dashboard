@@ -556,7 +556,10 @@ def generate_html(months_data: list[dict], latest_idx: int) -> str:
           margin, net_worth, budgets (list of {cat,s,l,p}) }
     latest_idx: index into months_data that should be shown by default (usually last)
     """
-    now_str = datetime.now().strftime("%d %b %Y %H:%M")
+    from datetime import timezone
+    import zoneinfo
+    berlin = zoneinfo.ZoneInfo("Europe/Berlin")
+    now_str = datetime.now(tz=berlin).strftime("%d %b %Y %H:%M")
 
     # Full per-month dataset for JS — powers KPI cards, budget tab, distribution tab
     # when the user clicks the ‹ › navigation buttons.
