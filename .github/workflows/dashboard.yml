@@ -14,23 +14,18 @@ on:
     - cron: '30 18 * * *'
   workflow_dispatch:
 
-permissions:
-  contents: read
-  pages: write
-  id-token: write
-
 jobs:
   generate:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+    permissions:
+      contents: write
     steps:
-      - name: Checkout
+      - name: Checkout latest commit
         uses: actions/checkout@v4
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          ref: main
           fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -45,27 +40,12 @@ jobs:
           NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
         run: python generate_dashboard.py
 
-<<<<<<< HEAD
       - name: Commit and push
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git fetch origin main
-          git checkout main
-          git reset --hard origin/main
-          cp output/dashboard.html /tmp/dashboard.html
-          git checkout -- .
-          cp /tmp/dashboard.html output/dashboard.html
           git add output/dashboard.html
-          git diff --staged --quiet || git commit -m "chore: dashboard update $(date -u +'%Y-%m-%d %H:%M UTC')"
+          git diff --staged --quiet && echo "No changes to commit" && exit 0
+          git commit -m "chore: dashboard update $(date -u +'%Y-%m-%d %H:%M UTC')"
+          git pull --rebase origin main
           git push origin main
-=======
-      - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: output/
-
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
->>>>>>> fbb90ccc31bc1b359ecdd1d8eb277cc6118ded75
