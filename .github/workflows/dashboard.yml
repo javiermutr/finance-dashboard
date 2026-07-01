@@ -2,10 +2,18 @@ name: Finance Dashboard
 
 on:
   schedule:
-    - cron: '0 6 * * *'   # 8:00 AM Berlin (CEST = UTC+2)
-    - cron: '0 18 * * *'  # 8:00 PM Berlin
-  workflow_dispatch:       # permite ejecutar manualmente desde GitHub
-
+    - cron: '30 8 * * *'   # 10:30 AM Berlin (CEST = UTC+2)
+    - cron: '0 9 * * *'    # 11:00 AM Berlin
+    - cron: '30 9 * * *'   # 11:30 AM Berlin
+    - cron: '0 10 * * *'   # 12:00 PM Berlin
+    - cron: '30 10 * * *'  # 12:30 PM Berlin
+    - cron: '0 11 * * *'   # 1:00 PM Berlin
+    - cron: '30 11 * * *'  # 1:30 PM Berlin
+    - cron: '0 12 * * *'   # 2:00 PM Berlin
+    - cron: '30 12 * * *'  # 2:30 PM Berlin
+    - cron: '30 18 * * *'  # 8:30 PM Berlin
+  workflow_dispatch:
+    
 jobs:
   generate:
     runs-on: ubuntu-latest
