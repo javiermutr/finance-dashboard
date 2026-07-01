@@ -20,9 +20,10 @@ except ImportError:
     pass  # dotenv not installed — rely on real env vars (GitHub Actions)
 
 # ── Config ────────────────────────────────────────────────────────────────────
-NOTION_TOKEN    = os.environ["NOTION_TOKEN"]
-BUDGETS_DB      = "39d6673d-a868-4521-9acd-5e5543f4d705"
-ACCOUNTS_DB     = "0f4234a1-4ebd-46c2-9ea7-4b2a990b19f7"
+NOTION_TOKEN      = os.environ["NOTION_TOKEN"]
+BUDGETS_DB        = "39d6673d-a868-4521-9acd-5e5543f4d705"
+ACCOUNTS_DB       = "0f4234a1-4ebd-46c2-9ea7-4b2a990b19f7"
+TRANSACTIONS_DB   = "e476092b-7600-4ff5-9a9e-8b97199fa096"
 HEADERS         = {
     "Authorization": f"Bearer {NOTION_TOKEN}",
     "Notion-Version": "2022-06-28",
@@ -388,6 +389,120 @@ def discover_all_periods() -> list[tuple[str, int]]:
     sorted_periods = sorted(all_periods, key=lambda t: (t[1], abbr_order.get(t[0], 0)))
     return sorted_periods
 
+# ── Profits query ──────────────────────────────────────────────────────────────
+def query_profits(month_abbr: str, year: int) -> float:
+    """
+    Reads all transactions with Type = 'Profits' for the given month/year
+    directly from the Transactions DB (they are NOT linked to any Budget).
+    Returns the total in EUR, applying FX conversion per transaction date.
+    """
+    # Build date range for the month
+    month_num = next(num for num, a in MONTH_ABBR.items() if a == month_abbr)
+    import calendar
+    last_day = calendar.monthrange(year, month_num)[1]
+    date_start = f"{year}-{month_num:02d}-01"
+    date_end   = f"{year}-{month_num:02d}-{last_day:02d}"
+
+    body = {
+        "filter": {
+            "and": [
+                {"property": "Type",        "select":  {"equals": "Profits"}},
+                {"property": "Date",        "date":    {"on_or_after":  date_start}},
+                {"property": "Date",        "date":    {"on_or_before": date_end}},
+            ]
+        },
+        "page_size": 100,
+    }
+
+    total_eur = 0.0
+    tx_count  = 0
+    start_cursor = None
+
+    while True:
+        if start_cursor:
+            body["start_cursor"] = start_cursor
+        data = notion_post(f"databases/{TRANSACTIONS_DB}/query", body)
+
+        futures_map = {}
+        pages = data.get("results", [])
+        with ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
+            for page in pages:
+                futures_map[pool.submit(read_transaction, page["id"])] = page["id"]
+
+        for future in as_completed(futures_map):
+            try:
+                tx = future.result()
+                total_eur += tx["amount_eur"]
+                tx_count  += 1
+                print(f"    📈 Profits: {tx['name']:40s}  {tx['currency']:4s} {tx['amount_eur']:10.2f}  ({tx['date']})")
+            except Exception as e:
+                print(f"    ⚠ Error reading Profits tx: {e}")
+
+        if data.get("has_more"):
+            start_cursor = data.get("next_cursor")
+        else:
+            break
+
+    print(f"   ✅ Total Profits {month_abbr} {year}: €{total_eur:,.2f}  ({tx_count} transactions)\n")
+    return round(total_eur, 2)
+
+def query_savings(month_abbr: str, year: int) -> float:
+    """
+    Reads all transactions with Type = 'Invest' for the given month/year
+    directly from the Transactions DB.
+    This is the RELIABLE way to calculate Savings — based on transaction Type,
+    not on fragile Budget name matching.
+    Returns the total in EUR, applying FX conversion per transaction date.
+    """
+    month_num = next(num for num, a in MONTH_ABBR.items() if a == month_abbr)
+    import calendar
+    last_day = calendar.monthrange(year, month_num)[1]
+    date_start = f"{year}-{month_num:02d}-01"
+    date_end   = f"{year}-{month_num:02d}-{last_day:02d}"
+
+    body = {
+        "filter": {
+            "and": [
+                {"property": "Type", "select": {"equals": "Invest"}},
+                {"property": "Date", "date":   {"on_or_after":  date_start}},
+                {"property": "Date", "date":   {"on_or_before": date_end}},
+            ]
+        },
+        "page_size": 100,
+    }
+
+    total_eur = 0.0
+    tx_count  = 0
+    start_cursor = None
+
+    while True:
+        if start_cursor:
+            body["start_cursor"] = start_cursor
+        data = notion_post(f"databases/{TRANSACTIONS_DB}/query", body)
+
+        futures_map = {}
+        pages = data.get("results", [])
+        with ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
+            for page in pages:
+                futures_map[pool.submit(read_transaction, page["id"])] = page["id"]
+
+        for future in as_completed(futures_map):
+            try:
+                tx = future.result()
+                total_eur += abs(tx["amount_eur"])
+                tx_count  += 1
+                print(f"    💰 Invest: {tx['name']:40s}  {tx['currency']:4s} {abs(tx['amount_eur']):10.2f}  ({tx['date']})")
+            except Exception as e:
+                print(f"    ⚠ Error reading Invest tx: {e}")
+
+        if data.get("has_more"):
+            start_cursor = data.get("next_cursor")
+        else:
+            break
+
+    print(f"   ✅ Total Savings (Invest) {month_abbr} {year}: €{total_eur:,.2f}  ({tx_count} transactions)\n")
+    return round(total_eur, 2)
+
 # ── Net Worth calculation ────────────────────────────────────────────────────────
 def calculate_base_net_worth() -> float:
     """
@@ -472,13 +587,22 @@ def query_budgets(month_abbr: str, year: int) -> list[dict]:
     return budgets
 
 # ── Financial calculations ──────────────────────────────────────────────────────
-INCOME_CATS   = {"salary", "other income"}
-SAVINGS_CATS  = {"savings & investment", "pension"}
+INCOME_CATS      = {"salary", "other income"}
+SAVINGS_CATS     = {"savings & investment", "pension"}  # kept for backward compat display only
 SKIP_IN_EXPENSES = INCOME_CATS | SAVINGS_CATS | {"loans"}
 
-def classify(budgets: list[dict]) -> dict:
+def classify(budgets: list[dict], savings_override: float = 0.0) -> dict:
+    """
+    Classifies budgets into Income, Savings, and Expenses.
+
+    savings_override: total Savings passed in from query_savings() — computed
+    directly from Type='Invest' transactions in the Transactions DB. This is
+    the reliable source. The old name-matching fallback (SAVINGS_CATS) is kept
+    only for budgets that still have 'Savings & Investment' or 'Pension' in
+    their name but whose transactions haven't been migrated to Type='Invest' yet.
+    """
     income   = 0.0
-    savings  = 0.0
+    savings  = savings_override  # start with the reliable Invest-type total
     expenses = []
 
     for b in budgets:
@@ -490,18 +614,16 @@ def classify(budgets: list[dict]) -> dict:
                 cat_key = cat_key.split(sep)[0].strip()
                 break
 
-        # "Invest"-type transactions (money moving into a brokerage/investment
-        # account) are tracked separately in read_budget_page() — they always
-        # count toward Savings directly, regardless of which Budget category
-        # they happen to be linked to. This is the RELIABLE path; the name
-        # matching below is a fallback for the manual "Savings & Investment"
-        # and "Pension" budget categories that don't use the Invest type.
-        savings += b.get("invest_total", 0.0)
-
         if any(ic in cat_key for ic in INCOME_CATS):
             income += b["spent"]
         elif any(sc in cat_key for sc in SAVINGS_CATS):
-            savings += b["spent"]
+            # Only add to savings if NOT already captured via Invest transactions
+            # (i.e. if the budget has old-style "spent" without Invest-type txs).
+            # invest_total was already counted via savings_override, so skip it
+            # here to avoid double-counting.
+            remaining = b["spent"] - b.get("invest_total", 0.0)
+            if remaining > 0:
+                savings += remaining
         else:
             expenses.append(b)
 
@@ -556,10 +678,7 @@ def generate_html(months_data: list[dict], latest_idx: int) -> str:
           margin, net_worth, budgets (list of {cat,s,l,p}) }
     latest_idx: index into months_data that should be shown by default (usually last)
     """
-    from datetime import timezone
-    import zoneinfo
-    berlin = zoneinfo.ZoneInfo("Europe/Berlin")
-    now_str = datetime.now(tz=berlin).strftime("%d %b %Y %H:%M")
+    now_str = datetime.now().strftime("%d %b %Y %H:%M")
 
     # Full per-month dataset for JS — powers KPI cards, budget tab, distribution tab
     # when the user clicks the ‹ › navigation buttons.
@@ -683,7 +802,7 @@ def generate_html(months_data: list[dict], latest_idx: int) -> str:
   </div>
 
   <div class="kpi-grid">
-    <div class="kpi net-worth"><div class="kpi-label">Net Worth</div><div class="kpi-value" id="kpi-nw"></div><div class="kpi-sub">Snapshot mensual</div></div>
+    <div class="kpi net-worth"><div class="kpi-label">Profits</div><div class="kpi-value" id="kpi-nw"></div><div class="kpi-sub">Market revaluation</div></div>
     <div class="kpi income"><div class="kpi-label">Income</div><div class="kpi-value" id="kpi-inc"></div><div class="kpi-badge badge-up">Salary + Other Income</div></div>
     <div class="kpi expenses"><div class="kpi-label">Expenses</div><div class="kpi-value" id="kpi-exp"></div><div class="kpi-badge badge-down" id="kpi-exp-pct"></div></div>
     <div class="kpi savings"><div class="kpi-label">Savings Rate</div><div class="kpi-value" id="kpi-sr"></div><div class="kpi-badge" id="kpi-sr-badge"></div></div>
@@ -874,7 +993,7 @@ function renderMonth(){{
   document.getElementById('btnPrev').disabled = currentIdx === 0;
   document.getElementById('btnNext').disabled = currentIdx === MONTHS.length - 1;
 
-  document.getElementById('kpi-nw').textContent = fmt(m.net_worth);
+  document.getElementById('kpi-nw').textContent = fmt(m.profits || 0);
   document.getElementById('kpi-inc').textContent = fmt(m.income);
   document.getElementById('kpi-exp').textContent = fmt(m.total_expenses);
   document.getElementById('kpi-exp-pct').textContent = m.income > 0 ? (pct(m.total_expenses/m.income*100)+' del income') : '—';
@@ -938,19 +1057,21 @@ def save_history(history: list[dict]):
         json.dump(history, f, indent=2)
 
 def update_history(history: list[dict], month_label: str, fin: dict, net_worth: float,
-                    label: str = "", abbr: str = "", year: int = 0) -> list[dict]:
+                    label: str = "", abbr: str = "", year: int = 0,
+                    profits: float = 0.0) -> list[dict]:
     entry = {
-        "label":         label or month_label,   # human-readable month name, e.g. "Junio"
-        "abbr":          abbr,                    # e.g. "Jun" — kept for matching against Notion
+        "label":         label or month_label,
+        "abbr":          abbr,
         "year":          year,
         "income":        round(fin["income"], 2),
-        "expenses":      round(fin["total_expenses"], 2),  # kept for backward-compat reading of old history.json
+        "expenses":      round(fin["total_expenses"], 2),
         "total_expenses": round(fin["total_expenses"], 2),
         "savings":       round(fin["savings"], 2),
         "savings_rate":  round(fin["savings_rate"], 1),
         "margin":        round(fin["margin"], 2),
         "net_worth":     net_worth,
-        "budgets":       build_budget_js(fin["expenses"]),  # full per-category detail for nav
+        "profits":       round(profits, 2),
+        "budgets":       build_budget_js(fin["expenses"]),
     }
     period_key = f"{abbr} {year}" if abbr and year else month_label
     # Replace if same period already exists, else append
@@ -1000,22 +1121,27 @@ def main():
 
         print(f"📥 Reading {label} {year} ({abbr})...")
         budgets = query_budgets(abbr, year)
-        fin = classify(budgets)
+
+        # Query Savings (Invest-type transactions) directly from Transactions DB
+        print(f"💰 Querying Savings (Invest transactions) for {label} {year}...")
+        savings_total = query_savings(abbr, year)
+
+        fin = classify(budgets, savings_override=savings_total)
         print(f"   Income:   €{fin['income']:.2f}")
         print(f"   Savings:  €{fin['savings']:.2f}  (SR: {fin['savings_rate']:.1f}%)")
         print(f"   Expenses: €{fin['total_expenses']:.2f}")
         print(f"   Margin:   €{fin['margin']:.2f}")
 
-        # Accumulate this month's margin onto the running Net Worth.
-        # Note: fin['margin'] = Income - Expenses (Savings is a sub-category of
-        # Income's destination, not subtracted separately — it's already inside
-        # Income/Expenses classification, so this matches the formula exactly:
-        # NetWorth(month) = base + cumulative_income - cumulative_expenses.
+        # Query Profits transactions directly from Transactions DB (not linked to Budgets)
+        print(f"📈 Querying Profits transactions for {label} {year}...")
+        profits = query_profits(abbr, year)
+
         running_net_worth += fin["margin"]
         net_worth = round(running_net_worth, 2)
         print(f"   Net Worth (cumulative): €{net_worth:,.2f}\n")
 
-        history = update_history(history, f"{abbr} {year}", fin, net_worth, label=label, abbr=abbr, year=year)
+        history = update_history(history, f"{abbr} {year}", fin, net_worth,
+                                 label=label, abbr=abbr, year=year, profits=profits)
 
         if (abbr, year) == (last_abbr, last_year):
             last_label, last_abbr_final, last_year_final = label, abbr, year
