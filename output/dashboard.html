@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Finance Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif; background: #0D1B2A; color: #E8EDF2; padding: 20px; }
+  .dash { max-width: 960px; margin: 0 auto; }
+  .top-bar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 10px; }
+  .top-bar h1 { font-size: 18px; font-weight: 600; }
+  .notion-badge { font-size: 10px; background: #1a3d2e; color: #1D9E75; padding: 2px 8px; border-radius: 20px; font-weight: 700; margin-left: 8px; }
+  .updated-badge { font-size: 10px; color: #8899AA; margin-left: 6px; }
+  .month-nav { display: flex; align-items: center; gap: 10px; }
+  .month-nav button { background: #1a2a3a; border: 0.5px solid #2a3a4a; border-radius: 8px; padding: 4px 12px; cursor: pointer; color: #E8EDF2; font-size: 13px; }
+  .month-nav button:hover:not(:disabled) { background: #2a3a4a; }
+  .month-nav button:disabled { opacity: 0.35; cursor: not-allowed; }
+  .month-label { font-size: 14px; font-weight: 600; min-width: 110px; text-align: center; }
+  .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 1.25rem; }
+  .kpi { background: #142030; border-radius: 12px; padding: 16px; border-left: 3px solid transparent; }
+  .kpi.net-worth { border-left-color: #534AB7; }
+  .kpi.income    { border-left-color: #1D9E75; }
+  .kpi.expenses  { border-left-color: #D85A30; }
+  .kpi.savings   { border-left-color: #BA7517; }
+  .kpi-label { font-size: 10px; color: #8899AA; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 6px; }
+  .kpi-value { font-size: 24px; font-weight: 700; }
+  .kpi-sub { font-size: 11px; color: #8899AA; margin-top: 4px; }
+  .kpi-badge { display: inline-block; font-size: 11px; padding: 2px 7px; border-radius: 20px; margin-top: 5px; font-weight: 500; }
+  .badge-up   { background: #0f2a1e; color: #1D9E75; }
+  .badge-down { background: #2a1010; color: #D85A30; }
+  .badge-warn { background: #2a1e08; color: #BA7517; }
+  .badge-ok   { background: #1a1830; color: #8B83FF; }
+  .charts-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+  .chart-card { background: #0f1e2d; border: 0.5px solid #1e2e3e; border-radius: 12px; padding: 16px; margin-bottom: 12px; }
+  .chart-title { font-size: 11px; font-weight: 600; color: #8899AA; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.05em; }
+  .legend-row { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 10px; font-size: 12px; color: #8899AA; }
+  .legend-dot { width: 10px; height: 10px; border-radius: 2px; display: inline-block; margin-right: 4px; }
+  .savings-rate-wrap { display: flex; flex-direction: column; align-items: center; padding: 8px 0; }
+  .gauge-num { font-size: 36px; font-weight: 700; margin: 8px 0 2px; }
+  .gauge-goal { font-size: 12px; color: #8899AA; }
+  .gauge-bar-track { width: 100%; max-width: 400px; height: 10px; background: #142030; border-radius: 10px; margin: 12px 0 4px; overflow: hidden; }
+  .gauge-bar-fill { height: 100%; border-radius: 10px; transition: width 0.4s; }
+  .gauge-labels { display: flex; justify-content: space-between; width: 100%; max-width: 400px; font-size: 11px; color: #8899AA; }
+  .tabs-header { display: flex; margin-bottom: 14px; border-bottom: 0.5px solid #1e2e3e; }
+  .tab-btn { padding: 7px 16px; font-size: 12px; font-weight: 600; cursor: pointer; background: none; border: none; border-bottom: 2px solid transparent; color: #8899AA; margin-bottom: -1px; }
+  .tab-btn.active { color: #E8EDF2; border-bottom-color: #534AB7; }
+  .tab-pane { display: none; }
+  .tab-pane.active { display: block; }
+  .section-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; margin: 10px 0 8px; font-weight: 600; }
+  .spend-item { margin-bottom: 12px; cursor: pointer; padding: 8px; margin: -8px -8px 4px -8px; border-radius: 8px; transition: background 0.15s; }
+  .spend-item:hover { background: #142030; }
+  .spend-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px; }
+  .spend-cat { font-size: 12px; font-weight: 600; }
+  .spend-amounts { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; }
+  .spend-used { font-size: 13px; font-weight: 700; }
+  .spend-budget { font-size: 11px; color: #8899AA; }
+  .spend-track { width: 100%; height: 7px; background: #142030; border-radius: 4px; overflow: hidden; }
+  .spend-fill { height: 100%; border-radius: 4px; }
+  .no-lim-row { margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+  .no-lim-cat { font-size: 12px; color: #8899AA; width: 150px; flex-shrink: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .no-lim-track { flex: 1; height: 6px; background: #142030; border-radius: 4px; }
+  .no-lim-amt { font-size: 11px; color: #8899AA; width: 60px; text-align: right; flex-shrink: 0; }
+  .dist-row { display: flex; align-items: center; gap: 10px; margin-bottom: 9px; cursor: pointer; padding: 6px 8px; margin-left: -8px; margin-right: -8px; border-radius: 8px; transition: background 0.15s; }
+  .dist-row:hover { background: #142030; }
+  .dist-dot { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
+  .dist-cat { font-size: 12px; width: 130px; flex-shrink: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .dist-track { flex: 1; height: 7px; background: #142030; border-radius: 4px; overflow: hidden; }
+  .dist-fill { height: 100%; border-radius: 4px; }
+  .dist-pct { font-size: 11px; color: #8899AA; width: 36px; text-align: right; flex-shrink: 0; }
+  .dist-amt { font-size: 11px; color: #8899AA; width: 60px; text-align: right; flex-shrink: 0; }
+  .fx-note { font-size: 10px; color: #8899AA; font-style: italic; margin-top: 6px; text-align: center; }
+  .placeholder-note { font-size: 10px; color: #BA7517; }
+  .no-month-data { font-size: 12px; color: #8899AA; text-align: center; padding: 30px 0; font-style: italic; }
+
+  /* Transaction detail modal */
+  .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.55); z-index: 100; align-items: flex-start; justify-content: center; padding: 8vh 16px; overflow-y: auto; }
+  .modal-overlay.open { display: flex; }
+  .modal-panel { background: #0f1e2d; border: 0.5px solid #2a3a4a; border-radius: 14px; padding: 20px; width: 100%; max-width: 480px; max-height: 76vh; display: flex; flex-direction: column; box-shadow: 0 20px 60px rgba(0,0,0,0.5); }
+  .modal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+  .modal-title { font-size: 15px; font-weight: 700; }
+  .modal-close { background: #1a2a3a; border: none; color: #8899AA; width: 26px; height: 26px; border-radius: 7px; cursor: pointer; font-size: 13px; line-height: 1; }
+  .modal-close:hover { background: #2a3a4a; color: #E8EDF2; }
+  .modal-sub { font-size: 11px; color: #8899AA; margin-bottom: 14px; }
+  .modal-tx-list { overflow-y: auto; }
+  .modal-tx-row { display: flex; justify-content: space-between; align-items: baseline; padding: 9px 0; border-bottom: 0.5px solid #1e2e3e; gap: 12px; }
+  .modal-tx-row:last-child { border-bottom: none; }
+  .modal-tx-name { font-size: 12px; color: #E8EDF2; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .modal-tx-date { font-size: 10px; color: #8899AA; flex-shrink: 0; }
+  .modal-tx-amt { font-size: 12px; font-weight: 700; flex-shrink: 0; min-width: 64px; text-align: right; }
+  .modal-tx-empty { font-size: 12px; color: #8899AA; text-align: center; padding: 24px 0; font-style: italic; }
+  @media(max-width:600px){.kpi-grid{grid-template-columns:1fr 1fr;}.charts-row{grid-template-columns:1fr;}}
+</style>
+</head>
+<body>
+<div class="dash">
+  <div class="top-bar">
+    <h1>💰 Finance Dashboard<span class="notion-badge">● NOTION LIVE</span><span class="updated-badge">01 Jul 2026 09:06</span></h1>
+    <div class="month-nav">
+      <button id="btnPrev" onclick="changeMonth(-1)">‹</button>
+      <span class="month-label" id="monthLabel"></span>
+      <button id="btnNext" onclick="changeMonth(1)">›</button>
+    </div>
+  </div>
+
+  <div class="kpi-grid">
+    <div class="kpi net-worth"><div class="kpi-label">Net Worth</div><div class="kpi-value" id="kpi-nw"></div><div class="kpi-sub">Snapshot mensual</div></div>
+    <div class="kpi income"><div class="kpi-label">Income</div><div class="kpi-value" id="kpi-inc"></div><div class="kpi-badge badge-up">Salary + Other Income</div></div>
+    <div class="kpi expenses"><div class="kpi-label">Expenses</div><div class="kpi-value" id="kpi-exp"></div><div class="kpi-badge badge-down" id="kpi-exp-pct"></div></div>
+    <div class="kpi savings"><div class="kpi-label">Savings Rate</div><div class="kpi-value" id="kpi-sr"></div><div class="kpi-badge" id="kpi-sr-badge"></div></div>
+  </div>
+
+  <div class="charts-row">
+    <div class="chart-card" style="margin-bottom:0;">
+      <div class="chart-title">Net Worth — últimos 6 meses</div>
+      <div style="position:relative;height:180px;"><canvas id="nwChart"></canvas></div>
+    </div>
+    <div class="chart-card" style="margin-bottom:0;">
+      <div class="chart-title">Monthly Summary</div>
+      <div class="legend-row">
+        <span><span class="legend-dot" style="background:#1D9E75"></span>Income</span>
+        <span><span class="legend-dot" style="background:#D85A30"></span>Expenses</span>
+        <span><span class="legend-dot" style="background:#BA7517"></span>Savings</span>
+      </div>
+      <div style="position:relative;height:155px;"><canvas id="sumChart"></canvas></div>
+    </div>
+  </div>
+
+  <div class="chart-card">
+    <div class="chart-title">Margen mensual (Income − Expenses) — últimos 6 meses</div>
+    <div style="position:relative;height:180px;"><canvas id="incExpChart"></canvas></div>
+  </div>
+
+  <div class="chart-card">
+    <div class="chart-title" style="margin-bottom:0;">Gastos — <span id="spendMonthLabel"></span></div>
+    <div class="tabs-header">
+      <button class="tab-btn active" onclick="switchTab('budget')" id="tab-b">Presupuesto</button>
+      <button class="tab-btn" onclick="switchTab('dist')" id="tab-d">Distribución</button>
+    </div>
+    <div class="tab-pane active" id="pane-b"><div id="budgetList"></div></div>
+    <div class="tab-pane" id="pane-d">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start;">
+        <div style="position:relative;height:240px;"><canvas id="donut"></canvas></div>
+        <div id="distList" style="padding-top:4px;"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="chart-card">
+    <div class="chart-title">Savings Rate — objetivo 30%</div>
+    <div class="savings-rate-wrap">
+      <div class="gauge-num" id="gauge-n"></div>
+      <div class="gauge-goal">Objetivo: 30% mensual</div>
+      <div class="gauge-bar-track"><div class="gauge-bar-fill" id="gauge-f"></div></div>
+      <div class="gauge-labels"><span>0%</span><span>15%</span><span>30%</span><span>45%</span><span>60%</span></div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="txModalOverlay" onclick="closeTxModalOnOverlay(event)">
+  <div class="modal-panel">
+    <div class="modal-header">
+      <div class="modal-title" id="txModalTitle"></div>
+      <button class="modal-close" onclick="closeTxModal()">✕</button>
+    </div>
+    <div class="modal-sub" id="txModalSub"></div>
+    <div class="modal-tx-list" id="txModalList"></div>
+  </div>
+</div>
+
+<script>
+// ══ FULL MONTH-BY-MONTH DATASET — powers real navigation ═══════════════════
+const MONTHS = [{"label": "Junio", "abbr": "Jun", "year": 2026, "income": 3670.7, "expenses": 2941.68, "total_expenses": 2941.68, "savings": 74.0, "savings_rate": 2.0, "margin": 729.02, "net_worth": 5627.26, "budgets": [{"cat": "Household", "s": 41.2, "l": 50, "p": false, "tx": [{"n": "dm", "a": 4.7, "d": "2026-06-25"}, {"n": "dm-drogerie", "a": 13, "d": "2026-06-20"}, {"n": "dm-drogerie", "a": 3, "d": "2026-06-18"}, {"n": "dm", "a": 4, "d": "2026-06-10"}, {"n": "dm", "a": 13.5, "d": "2026-06-05"}, {"n": "dm", "a": 3, "d": "2026-06-03"}]}, {"cat": "Clothing", "s": 514.87, "l": 1, "p": true, "tx": [{"n": "Reserved", "a": 54, "d": "2026-06-26"}, {"n": "Galeria", "a": 12, "d": "2026-06-26"}, {"n": "BestSecret", "a": 448.87, "d": "2026-06-22"}]}, {"cat": "Haircut", "s": 48, "l": 23, "p": false, "tx": [{"n": "Studio 15", "a": 25, "d": "2026-06-24"}, {"n": "Studio 15", "a": 23, "d": "2026-06-06"}]}, {"cat": "Groceries", "s": 288.53, "l": 220, "p": false, "tx": [{"n": "Netto Marken-Discount", "a": 6, "d": "2026-06-27"}, {"n": "REWE", "a": 2, "d": "2026-06-27"}, {"n": "REWE", "a": 14, "d": "2026-06-27"}, {"n": "REWE", "a": 38, "d": "2026-06-26"}, {"n": "REWE", "a": 3.28, "d": "2026-06-25"}, {"n": "Lidl", "a": 22.9, "d": "2026-06-25"}, {"n": "Bäckerei Zöttl", "a": 3, "d": "2026-06-24"}, {"n": "REWE", "a": 8, "d": "2026-06-22"}, {"n": "BackWerk", "a": 7, "d": "2026-06-21"}, {"n": "Siegel Backkultur", "a": 8, "d": "2026-06-21"}, {"n": "REWE", "a": 25, "d": "2026-06-20"}, {"n": "REWE", "a": 1.22, "d": "2026-06-19"}, {"n": "Aldi", "a": 8.42, "d": "2026-06-18"}, {"n": "Privat Bäckerei Wimmer", "a": 3, "d": "2026-06-17"}, {"n": "Groceries", "a": 37, "d": "2026-06-15"}, {"n": "Lidl sagt Danke", "a": 3, "d": "2026-06-08"}, {"n": "REWE", "a": 20.99, "d": "2026-06-05"}, {"n": "Hellofresh", "a": 60.51, "d": "2026-06-03"}, {"n": "REWE", "a": 9, "d": "2026-06-02"}, {"n": "REWE", "a": 8.21, "d": "2026-06-01"}]}, {"cat": "Rent/Mortgage", "s": 1000, "l": 1000, "p": false, "tx": [{"n": "Rent", "a": 1000, "d": "2026-06-01"}]}, {"cat": "Others", "s": 311.29, "l": 60, "p": false, "tx": [{"n": "Ventilator", "a": 97.9, "d": "2026-06-25"}, {"n": "Ticket Mom Pitalito", "a": 158.04, "d": "2026-06-12"}, {"n": "eSim", "a": 7.99, "d": "2026-06-09"}, {"n": "Adjust", "a": 47.36, "d": "2026-06-06"}]}, {"cat": "Eat Out", "s": 382.75, "l": 180, "p": false, "tx": [{"n": "SumUp *Dinner for friend", "a": 12, "d": "2026-06-28"}, {"n": "ILFA", "a": 15.25, "d": "2026-06-27"}, {"n": "LeboQ", "a": 8, "d": "2026-06-27"}, {"n": "Best Döner & Falafel", "a": 11, "d": "2026-06-26"}, {"n": "Foodji", "a": 12, "d": "2026-06-25"}, {"n": "Klara Latranyi", "a": 5, "d": "2026-06-24"}, {"n": "Donner", "a": 8, "d": "2026-06-24"}, {"n": "Haxengrill", "a": 9, "d": "2026-06-23"}, {"n": "Burger King", "a": 15, "d": "2026-06-21"}, {"n": "Tacos", "a": 98.1, "d": "2026-06-19"}, {"n": "Eataly", "a": 4, "d": "2026-06-18"}, {"n": "FRIENDS OF STRANGERS", "a": 17, "d": "2026-06-17"}, {"n": "Klara Latranyi", "a": 5, "d": "2026-06-17"}, {"n": "Kebabo", "a": 7, "d": "2026-06-16"}, {"n": "SumUp *Cafe ORA", "a": 9, "d": "2026-06-13"}, {"n": "Klara Latranyi", "a": 4.6, "d": "2026-06-11"}, {"n": "Nils bar", "a": 25, "d": "2026-06-11"}, {"n": "Jalin Restaurant", "a": 41, "d": "2026-06-11"}, {"n": "Baeckerei Zoettl", "a": 3, "d": "2026-06-10"}, {"n": "Beer", "a": 12, "d": "2026-06-06"}, {"n": "LS RBSG Gastronomie", "a": 30, "d": "2026-06-06"}, {"n": "Pizza", "a": 8.6, "d": "2026-06-06"}, {"n": "Cafe Schreibwaren am Schl", "a": 12, "d": "2026-06-04"}, {"n": "Hoflinger 10058", "a": 2.7, "d": "2026-06-04"}, {"n": "Best Doner Falafel", "a": 8.5, "d": "2026-06-01"}]}, {"cat": "Other Insurance", "s": 65.3, "l": 66, "p": false, "tx": [{"n": "Dental Insurance", "a": 40.3, "d": "2026-06-02"}, {"n": "Insurance Mom", "a": 25, "d": "2026-06-01"}]}, {"cat": "Phone", "s": 0, "l": 40, "p": false, "tx": []}, {"cat": "Transportation", "s": 59.85, "l": 60, "p": false, "tx": [{"n": "Deutschland ticket", "a": 59.85, "d": "2026-06-01"}]}, {"cat": "Dental Insurance", "s": 0, "l": 1, "p": false, "tx": []}, {"cat": "Entertainment & Leisure", "s": 0, "l": 80, "p": false, "tx": []}, {"cat": "Online Courses", "s": 0, "l": 1, "p": false, "tx": []}, {"cat": "Gifts Given", "s": 0, "l": 30, "p": false, "tx": []}, {"cat": "Books & Supplies", "s": 0, "l": 20, "p": false, "tx": []}, {"cat": "Subscriptions", "s": 18, "l": 20, "p": false, "tx": [{"n": "Anthropic", "a": 18, "d": "2026-06-27"}]}, {"cat": "Utilities & Laundry", "s": 82.64, "l": 85, "p": false, "tx": [{"n": "Internet PYUR", "a": 33.99, "d": "2026-06-01"}, {"n": "Octopus", "a": 48.65, "d": "2026-06-01"}]}, {"cat": "Holidays", "s": 0, "l": 80, "p": false, "tx": []}, {"cat": "Medicine", "s": 70.25, "l": 30, "p": false, "tx": [{"n": "Dental Shop Apotheke", "a": 26, "d": "2026-06-09"}, {"n": "Therapy", "a": 44.25, "d": "2026-06-04"}]}, {"cat": "Fitness & Gym", "s": 59, "l": 50, "p": false, "tx": [{"n": "Gym", "a": 15, "d": "2026-06-22"}, {"n": "Gym", "a": 15, "d": "2026-06-17"}, {"n": "Gym", "a": 29, "d": "2026-06-09"}]}]}, {"label": "Julio", "abbr": "Jul", "year": 2026, "income": 3679.38, "expenses": 0, "total_expenses": 0, "savings": 0.0, "savings_rate": 0.0, "margin": 3679.38, "net_worth": 9306.64, "budgets": [{"cat": "Holidays", "s": 0, "l": 80, "p": false, "tx": []}, {"cat": "Books & Supplies", "s": 0, "l": 20, "p": false, "tx": []}, {"cat": "Medicine", "s": 0, "l": 25, "p": false, "tx": []}, {"cat": "Groceries", "s": 0, "l": 200, "p": false, "tx": []}, {"cat": "Others", "s": 0, "l": 40, "p": false, "tx": []}, {"cat": "Transportation", "s": 0, "l": 60, "p": false, "tx": []}, {"cat": "Phone", "s": 0, "l": 40, "p": false, "tx": []}, {"cat": "Gifts Given", "s": 0, "l": 30, "p": false, "tx": []}, {"cat": "Dental Insurance", "s": 0, "l": 1, "p": false, "tx": []}, {"cat": "Utilities & Laundry", "s": 0, "l": 80, "p": false, "tx": []}, {"cat": "Eat Out", "s": 0, "l": 180, "p": false, "tx": []}, {"cat": "Haircut", "s": 0, "l": 23, "p": false, "tx": []}, {"cat": "Online Courses", "s": 0, "l": 15, "p": false, "tx": []}, {"cat": "Fitness & Gym", "s": 0, "l": 50, "p": false, "tx": []}, {"cat": "Clothing", "s": 0, "l": 20, "p": false, "tx": []}, {"cat": "Rent/Mortgage", "s": 0, "l": 1000, "p": false, "tx": []}, {"cat": "Other Insurance", "s": 0, "l": 66, "p": false, "tx": []}, {"cat": "Subscriptions", "s": 0, "l": 20, "p": false, "tx": []}, {"cat": "Entertainment & Leisure", "s": 0, "l": 80, "p": false, "tx": []}, {"cat": "Household", "s": 0, "l": 40, "p": false, "tx": []}]}];
+let currentIdx = 1;
+
+const COLORS = ['#E91E63','#D85A30','#FF9800','#534AB7','#BA7517','#1D9E75','#0F6E56','#993C1D','#3C3489','#854F0B','#2196F3','#9C27B0','#607D8B','#795548','#009688'];
+
+function fmt(n)  { return '€'+n.toLocaleString('de-DE',{minimumFractionDigits:0,maximumFractionDigits:0}); }
+function fmtD(n) { return '€'+n.toLocaleString('de-DE',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function pct(n)  { return Math.round(n)+'%'; }
+function bc(r)   { return r>=1?'#D85A30':r>=0.8?'#BA7517':'#1D9E75'; }
+
+function sortB(arr){
+  const over   =arr.filter(b=>!b.p&&b.l>1&&b.s>b.l).sort((a,b)=>(b.s/b.l)-(a.s/a.l));
+  const atlim  =arr.filter(b=>!b.p&&b.l>1&&b.s===b.l);
+  const under  =arr.filter(b=>!b.p&&b.l>1&&b.s>0&&b.s<b.l).sort((a,b)=>(b.s/b.l)-(a.s/a.l));
+  const ph     =arr.filter(b=>b.p&&b.s>0);
+  const nospend=arr.filter(b=>b.s===0);
+  return{over,atlim,under,ph,nospend};
+}
+function spendRow(b,note=''){
+  const r=b.s/b.l,u=Math.min(r*100,100),c=bc(r);
+  const over=b.s>b.l,diff=Math.abs(b.s-b.l);
+  const dl=over?`<span style="color:#D85A30;font-size:11px;">+${fmtD(diff)} sobre límite</span>`:`<span style="color:#1D9E75;font-size:11px;">${fmtD(diff)} disponible</span>`;
+  const safeCat = b.cat.replace(/'/g, "\'");
+  return`<div class="spend-item" onclick="openTxModal('${safeCat}')">
+    <div class="spend-header"><span class="spend-cat">${b.cat}</span><span style="font-size:11px;font-weight:700;color:${c};">${Math.round(r*100)}% usado</span></div>
+    <div class="spend-amounts"><span class="spend-used" style="color:${c};">${fmtD(b.s)}</span><span class="spend-budget">límite ${fmt(b.l)}</span></div>
+    <div class="spend-track"><div class="spend-fill" style="width:${u}%;background:${c};"></div></div>
+    <div style="margin-top:3px;">${dl}${note}</div>
+  </div>`;
+}
+function renderBudget(budgets){
+  const{over,atlim,under,ph,nospend}=sortB(budgets);
+  let h='';
+  if(over.length||ph.length){h+='<div class="section-label" style="color:#D85A30;">⚠ Sobre el límite</div>';over.forEach(b=>{h+=spendRow(b);});ph.forEach(b=>{h+=spendRow(b,'<span class="placeholder-note"> · límite placeholder</span>');});}
+  if(atlim.length){h+='<div class="section-label" style="color:#BA7517;margin-top:10px;">En el límite exacto</div>';atlim.forEach(b=>{h+=spendRow(b);});}
+  if(under.length){h+='<div class="section-label" style="color:#8899AA;margin-top:10px;">Dentro del presupuesto</div>';under.forEach(b=>{h+=spendRow(b);});}
+  if(nospend.length){h+='<div class="section-label" style="color:#8899AA;margin-top:10px;">Sin transacciones</div>';nospend.forEach(b=>{h+=`<div class="no-lim-row"><div class="no-lim-cat">${b.cat}</div><div class="no-lim-track"></div><div class="no-lim-amt">lím. ${fmt(b.l)}</div></div>`;});}
+  if(!h) h = '<div class="no-month-data">Sin datos de presupuesto para este mes.</div>';
+  document.getElementById('budgetList').innerHTML=h;
+}
+function renderDist(budgets){
+  const items=budgets.filter(b=>b.s>0).sort((a,b)=>b.s-a.s);
+  if(!items.length){
+    document.getElementById('distList').innerHTML='<div class="no-month-data">Sin gastos registrados este mes.</div>';
+    if(donut){ donut.data.labels=[]; donut.data.datasets[0].data=[]; donut.update(); }
+    return;
+  }
+  const total=items.reduce((s,b)=>s+b.s,0),mx=Math.max(...items.map(b=>b.s),1);
+  let h='';
+  items.forEach((b,i)=>{const p=Math.round((b.s/total)*100),bw=Math.round((b.s/mx)*100);const safeCat=b.cat.replace(/'/g, "\'");h+=`<div class="dist-row" onclick="openTxModal('${safeCat}')"><div class="dist-dot" style="background:${COLORS[i%COLORS.length]};"></div><div class="dist-cat">${b.cat}</div><div class="dist-track"><div class="dist-fill" style="width:${bw}%;background:${COLORS[i%COLORS.length]};"></div></div><div class="dist-pct">${p}%</div><div class="dist-amt">${fmt(b.s)}</div></div>`;});
+  document.getElementById('distList').innerHTML=h;
+  if(donut){
+    donut.data.labels=items.map(b=>b.cat);
+    donut.data.datasets[0].data=items.map(b=>b.s);
+    donut.update();
+  }
+}
+
+// ── Transaction detail modal ─────────────────────────────────────────────
+// Looks up the clicked category within the CURRENTLY DISPLAYED month
+// (MONTHS[currentIdx]) and lists every underlying transaction.
+function formatTxDate(isoDate) {
+  // isoDate is "YYYY-MM-DD" — render as "DD/MM"
+  if (!isoDate || isoDate.length < 10) return isoDate || '';
+  const [y, m, d] = isoDate.split('-');
+  return `${d}/${m}`;
+}
+
+window.openTxModal = function(catName) {
+  const m = MONTHS[currentIdx];
+  const cat = (m.budgets || []).find(b => b.cat === catName);
+  if (!cat) return;
+
+  document.getElementById('txModalTitle').textContent = cat.cat;
+  const count = (cat.tx || []).length;
+  document.getElementById('txModalSub').textContent =
+    `${m.label} ${m.year} · ${fmtD(cat.s)} en ${count} transacci${count===1?'ón':'ones'}`;
+
+  const listEl = document.getElementById('txModalList');
+  if (!count) {
+    listEl.innerHTML = '<div class="modal-tx-empty">Sin transacciones individuales registradas para esta categoría.</div>';
+  } else {
+    listEl.innerHTML = cat.tx.map(t => `
+      <div class="modal-tx-row">
+        <span class="modal-tx-name">${t.n}</span>
+        <span class="modal-tx-date">${formatTxDate(t.d)}</span>
+        <span class="modal-tx-amt">${fmtD(t.a)}</span>
+      </div>
+    `).join('');
+  }
+
+  document.getElementById('txModalOverlay').classList.add('open');
+  document.body.style.overflow = 'hidden';
+};
+
+window.closeTxModal = function() {
+  document.getElementById('txModalOverlay').classList.remove('open');
+  document.body.style.overflow = '';
+};
+
+window.closeTxModalOnOverlay = function(evt) {
+  if (evt.target.id === 'txModalOverlay') closeTxModal();
+};
+
+document.addEventListener('keydown', function(evt) {
+  if (evt.key === 'Escape') closeTxModal();
+});
+
+window.switchTab=function(tab){
+  document.getElementById('pane-b').classList.toggle('active',tab==='budget');
+  document.getElementById('pane-d').classList.toggle('active',tab==='dist');
+  document.getElementById('tab-b').classList.toggle('active',tab==='budget');
+  document.getElementById('tab-d').classList.toggle('active',tab==='dist');
+  if(tab==='dist'&&donut)donut.resize();
+};
+
+// ── Renders the currently-selected month's KPIs, budget tab, and distribution tab
+function renderMonth(){
+  const m = MONTHS[currentIdx];
+
+  document.getElementById('monthLabel').textContent = `${m.label} ${m.year}`;
+  document.getElementById('spendMonthLabel').textContent = `${m.label.toLowerCase()} ${m.year}`;
+  document.getElementById('btnPrev').disabled = currentIdx === 0;
+  document.getElementById('btnNext').disabled = currentIdx === MONTHS.length - 1;
+
+  document.getElementById('kpi-nw').textContent = fmt(m.net_worth);
+  document.getElementById('kpi-inc').textContent = fmt(m.income);
+  document.getElementById('kpi-exp').textContent = fmt(m.total_expenses);
+  document.getElementById('kpi-exp-pct').textContent = m.income > 0 ? (pct(m.total_expenses/m.income*100)+' del income') : '—';
+
+  const sr = m.savings_rate;
+  document.getElementById('kpi-sr').textContent = pct(sr);
+  const srB=document.getElementById('kpi-sr-badge');
+  if(sr>=30){srB.textContent='✓ Objetivo alcanzado';srB.className='kpi-badge badge-ok';}
+  else if(sr>=20){srB.textContent=pct(sr)+' · cerca del 30%';srB.className='kpi-badge badge-warn';}
+  else{srB.textContent=pct(sr)+' · por debajo del 30%';srB.className='kpi-badge badge-down';}
+
+  document.getElementById('gauge-n').textContent=pct(sr);
+  document.getElementById('gauge-f').style.width=Math.min((sr/60)*100,100)+'%';
+  document.getElementById('gauge-f').style.background=sr>=30?'#1D9E75':sr>=20?'#BA7517':'#D85A30';
+
+  renderBudget(m.budgets);
+  renderDist(m.budgets);
+}
+
+// ── Rolling 6-month charts (independent of the month navigator above) ───────
+// IMPORTANT: these must be created BEFORE the first renderMonth() call,
+// because renderMonth() -> renderDist() references the `donut` chart object.
+Chart.defaults.font.family='-apple-system,BlinkMacSystemFont,Inter,sans-serif';
+Chart.defaults.color='#8899AA';
+
+new Chart(document.getElementById('nwChart'),{type:'line',data:{labels:["Junio", "Julio"],datasets:[{label:'Net Worth',data:[5627.26, 9306.64],borderColor:'#534AB7',backgroundColor:'rgba(83,74,183,0.12)',borderWidth:2,pointRadius:5,pointBackgroundColor:'#534AB7',fill:true,tension:0.3}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>fmt(ctx.parsed.y)}}},scales:{x:{grid:{display:false},ticks:{font:{size:11}}},y:{grid:{color:'rgba(255,255,255,0.05)'},ticks:{font:{size:11},callback:v=>'€'+(v/1000).toFixed(0)+'k'}}}}});
+
+new Chart(document.getElementById('sumChart'),{type:'bar',data:{labels:["Junio", "Julio"],datasets:[{label:'Income',data:[3670.7, 3679.38],backgroundColor:'#1D9E75',borderRadius:4},{label:'Expenses',data:[2941.68, 0],backgroundColor:'#D85A30',borderRadius:4},{label:'Savings',data:[74.0, 0.0],backgroundColor:'#BA7517',borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>' '+ctx.dataset.label+': '+fmt(ctx.parsed.y)}}},scales:{x:{grid:{display:false},ticks:{font:{size:10}}},y:{grid:{color:'rgba(255,255,255,0.05)'},ticks:{font:{size:10},callback:v=>'€'+v}}}}});
+
+new Chart(document.getElementById('incExpChart'),{type:'bar',data:{labels:["Junio", "Julio"],datasets:[{label:'Margen',data:[729.02, 3679.38],backgroundColor:["rgba(29,158,117,0.85)", "rgba(29,158,117,0.85)"],borderColor:["#1D9E75", "#1D9E75"],borderWidth:1.5,borderRadius:6}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>{const v=ctx.parsed.y;return(v>=0?' Superávit: ':' Déficit: ')+fmt(Math.abs(v));}}}},scales:{x:{grid:{display:false},ticks:{font:{size:11}}},y:{grid:{color:'rgba(255,255,255,0.05)'},ticks:{font:{size:11},callback:v=>'€'+(v/1000).toFixed(1)+'k'},afterDataLimits(scale){const abs=Math.max(Math.abs(scale.min),Math.abs(scale.max));scale.min=-abs*1.3;scale.max=abs*1.3;}}}}});
+
+let donut = new Chart(document.getElementById('donut'),{type:'doughnut',data:{labels:[],datasets:[{data:[],backgroundColor:COLORS,borderWidth:2,borderColor:'#0f1e2d'}]},options:{responsive:true,maintainAspectRatio:false,cutout:'62%',plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>' '+ctx.label+': '+fmt(ctx.parsed)}}}}});
+
+// NOW it's safe to render the initial month — donut already exists.
+renderMonth();
+
+window.changeMonth = function(dir) {
+  const newIdx = currentIdx + dir;
+  if (newIdx >= 0 && newIdx < MONTHS.length) {
+    currentIdx = newIdx;
+    renderMonth();
+  }
+};
+</script>
+</body>
+</html>

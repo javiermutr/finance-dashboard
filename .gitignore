@@ -1,0 +1,17 @@
+# Secretos — NUNCA subir
+.env
+
+# Outputs — solo excluir history.json, el dashboard.html SÍ se sube
+output/history.json
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+env/
+
+# VS Code y Mac
+.vscode/
+.DS_Store
