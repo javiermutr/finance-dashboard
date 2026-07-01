@@ -1,5 +1,5 @@
-el contenido de dashboard.yml en github es
 name: Finance Dashboard
+
 on:
   schedule:
     - cron: '30 8 * * *'
@@ -13,6 +13,7 @@ on:
     - cron: '30 12 * * *'
     - cron: '30 18 * * *'
   workflow_dispatch:
+
 jobs:
   generate:
     runs-on: ubuntu-latest
@@ -21,18 +22,33 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+
       - name: Install dependencies
         run: pip install requests python-dotenv
+
       - name: Generate dashboard
         env:
           NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
         run: python generate_dashboard.py
+
       - name: Commit and push
-        uses: stefanzweifel/git-auto-commit-action@v5
-        with:
-          commit_message: "chore: dashboard update"
-          file_pattern: output/dashboard.html
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git fetch origin main
+          git checkout main
+          git reset --hard origin/main
+          cp output/dashboard.html /tmp/dashboard.html
+          git checkout -- .
+          cp /tmp/dashboard.html output/dashboard.html
+          git add output/dashboard.html
+          git diff --staged --quiet || git commit -m "chore: dashboard update $(date -u +'%Y-%m-%d %H:%M UTC')"
+          git push origin main
