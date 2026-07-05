@@ -587,32 +587,24 @@ def query_budgets(month_abbr: str, year: int) -> list[dict]:
     return budgets
 
 # ── Financial calculations ──────────────────────────────────────────────────────
-# Categories that count toward Income (excluded from expenses)
-INCOME_CATS  = {"salary", "other income"}
-# Categories that count toward Savings AND should be hidden from the expense tab
-# (pure investment flows — money moving to brokerage accounts)
-SAVINGS_ONLY_CATS = {"savings & investment"}
-# Categories that count toward Savings BUT should also appear in the expense tab
-# (mandatory recurring contributions with a budget limit that can be exceeded)
-SAVINGS_AND_VISIBLE_CATS = {"pension"}
-SAVINGS_CATS = SAVINGS_ONLY_CATS | SAVINGS_AND_VISIBLE_CATS  # kept for compat
+# Categories that count toward Income only (excluded from expense tab)
+INCOME_CATS = {"salary", "other income"}
+# Categories hidden from expense tab (pure invest flows already captured by query_savings)
+HIDDEN_FROM_EXPENSES = {"savings & investment"}
 
 def classify(budgets: list[dict], savings_override: float = 0.0) -> dict:
     """
     Classifies budgets into Income, Savings, and Expenses.
 
-    savings_override: total Savings passed in from query_savings() — computed
-    directly from Type='Invest' transactions in the Transactions DB. This is
-    the reliable source.
+    Savings = ONLY transactions with Type='Invest', summed by query_savings().
+    savings_override carries that total in directly — no name-based fallback.
 
-    Key design decisions:
-    - "Savings & Investment" budgets → count as Savings, hidden from expense tab
-    - "Pension" budgets → count as Savings AND appear in expense tab (so over-budget
-      is visible), since Pension is a mandatory recurring payment with a limit
-    - Income budgets → never appear in expense tab
+    Every budget that is not Income and not a pure invest-flow budget appears
+    in the expense tab, including Pension (which has a real limit and can go
+    over budget).
     """
     income   = 0.0
-    savings  = savings_override  # start with the reliable Invest-type total
+    savings  = savings_override  # 100% from Type='Invest' transactions
     expenses = []
 
     for b in budgets:
@@ -627,20 +619,13 @@ def classify(budgets: list[dict], savings_override: float = 0.0) -> dict:
         if any(ic in cat_key for ic in INCOME_CATS):
             # Income: add to income total, never shown in expense tab
             income += b["spent"]
-        elif any(sc in cat_key for sc in SAVINGS_ONLY_CATS):
-            # Pure savings/invest: count toward savings, hidden from expense tab
-            # (avoid double-counting with invest_total from query_savings)
-            remaining = b["spent"] - b.get("invest_total", 0.0)
-            if remaining > 0:
-                savings += remaining
-        elif any(sc in cat_key for sc in SAVINGS_AND_VISIBLE_CATS):
-            # Pension: count toward savings AND show in expense tab
-            # so over-budget alerts are visible
-            remaining = b["spent"] - b.get("invest_total", 0.0)
-            if remaining > 0:
-                savings += remaining
-            expenses.append(b)  # also show in dashboard budget tab
+        elif any(hc in cat_key for hc in HIDDEN_FROM_EXPENSES):
+            # Pure invest-flow budgets: hidden from expense tab since their
+            # transactions are already captured as Type='Invest' in savings_override.
+            pass
         else:
+            # Everything else — including Pension — appears in the expense tab
+            # so over-budget is visible and alerts fire correctly.
             expenses.append(b)
 
     total_expenses = sum(e["spent"] for e in expenses)
