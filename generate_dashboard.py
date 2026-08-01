@@ -1,5 +1,3 @@
-
-Generate dashboard · PY
 """
 Finance Dashboard Generator
 Reads Notion Finance Tracker and generates an HTML dashboard.
