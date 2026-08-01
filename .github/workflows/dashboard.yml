@@ -2,16 +2,11 @@ name: Finance Dashboard
 
 on:
   schedule:
-    - cron: '30 8 * * *'
-    - cron: '0 9 * * *'
-    - cron: '30 9 * * *'
-    - cron: '0 10 * * *'
-    - cron: '30 10 * * *'
-    - cron: '0 11 * * *'
-    - cron: '30 11 * * *'
-    - cron: '0 12 * * *'
-    - cron: '30 12 * * *'
-    - cron: '30 18 * * *'
+    - cron: '0 6 * * *'   # 08:00 Munich
+    - cron: '0 10 * * *'  # 12:00 Munich
+    - cron: '0 14 * * *'  # 16:00 Munich
+    - cron: '0 18 * * *'  # 20:00 Munich
+    - cron: '0 22 * * *'  # 22:00 Munich
   workflow_dispatch:
 
 jobs:
